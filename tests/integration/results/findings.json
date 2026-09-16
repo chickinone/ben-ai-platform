@@ -1,0 +1,32 @@
+{
+  "budget": {
+    "max_budget_usd": 0.0002,
+    "successful_calls_before_block": 4,
+    "spend_recorded_usd": 0.0003280000000000001,
+    "block_status": 429,
+    "block_message": "Error code: 429 - {'error': {'message': 'Budget has been exceeded! Key=it-56c10155 (sk-...ur_A) Current cost: 0.00024600000000003097, Max budget: 0.0002', 'type': 'budget_exceeded', 'param': None, 'code': '429'}}"
+  },
+  "multi_worker_pii": {
+    "requests": 20,
+    "failures": [],
+    "mapping_keys_in_redis": 21
+  },
+  "usage_event": {
+    "call_id": "048ad49a-3138-44af-933b-1a25159552db",
+    "trace_id": "572b1cc0-0522-4666-acc1-53e00bff6eed",
+    "team_id": "e3894e39-7faf-484a-ab8f-0bc14b034d02",
+    "team_alias": "it-642d9f47",
+    "key_hash": "c971088fa68df3a48fb1be88533484c5849271039f652985909fa8b00e951e6f",
+    "key_alias": "it-642d9f47",
+    "model_group": "mock-cloud-small",
+    "model": "openai/mock-cloud-small",
+    "call_type": "acompletion",
+    "tokens_in": "24",
+    "tokens_out": "11",
+    "cost_usd": "7.9e-05",
+    "cache_hit": "False",
+    "stream": "False",
+    "start_time": "1789447515.500427",
+    "end_time": "1789447515.505245"
+  }
+}

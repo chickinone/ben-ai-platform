@@ -1,0 +1,26 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Kết quả thử nghiệm: giữ findings*.json làm bằng chứng, bỏ log và junit
+spikes/*/results/*.log
+spikes/*/results/*.xml
+tests/integration/results/*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

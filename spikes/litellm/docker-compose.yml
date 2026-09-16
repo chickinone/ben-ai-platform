@@ -1,0 +1,57 @@
+# Môi trường thử nghiệm LiteLLM, tách khỏi compose chính của Bến.
+# Chạy từ thư mục gốc repo:  .\spikes\litellm\run.ps1
+name: ben-spike-litellm
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  mock-cloud:
+    build: ../../tools/mock_llm
+    environment:
+      MOCK_NAME: cloud
+    ports:
+      - "127.0.0.1:18081:8080"
+
+  mock-local:
+    build: ../../tools/mock_llm
+    environment:
+      MOCK_NAME: local
+    ports:
+      - "127.0.0.1:18082:8080"
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.100.1
+    command: ["--config", "/app/ben/config.yaml", "--port", "4000", "--num_workers", "1"]
+    environment:
+      LITELLM_MASTER_KEY: sk-ben-spike-master
+      MOCK_API_KEY: sk-mock
+      # Passthrough /anthropic trỏ vào mock thay vì api.anthropic.com
+      ANTHROPIC_API_BASE: http://mock-cloud:8080
+      ANTHROPIC_API_KEY: sk-mock
+      BEN_REDIS_HOST: redis
+      # Hiện log INFO của plugin Bến làm bằng chứng hook đã chạy
+      LITELLM_LOG: INFO
+    volumes:
+      - ./config:/app/ben:ro
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      mock-cloud:
+        condition: service_healthy
+      mock-local:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 60

@@ -1,0 +1,230 @@
+# Phần lõi của Bến cho môi trường dev.
+# Chạy từ thư mục gốc repo:
+#   docker compose --env-file .env -f deploy/compose/docker-compose.yml up -d --build
+# Mọi cổng chỉ bind 127.0.0.1.
+name: ben
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Chạy scripts/init_env.py để tạo .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ben
+      BEN_APP_DB_PASSWORD: ${BEN_APP_DB_PASSWORD:?}
+      TZ: UTC
+    ports:
+      # Cổng host đổi được, tránh đụng Postgres cài sẵn trên máy
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d ben"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # noeviction: Langfuse yêu cầu, và an toàn cho quota/stream (ADR-005)
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?}
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/ben-docs local/ben-reports local/ben-policy-bundles local/langfuse
+    restart: "no"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:?}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:?}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./keycloak/ben-realm.json:/opt/keycloak/data/import/ben-realm.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:0.6.8
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: services/control-plane/Dockerfile
+    environment:
+      BEN_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/ben
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: services/gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      BEN_ENV: dev
+      BEN_SERVICE_NAME: gateway
+      BEN_DATABASE_URL: postgresql://ben_app:${BEN_APP_DB_PASSWORD:?}@postgres:5432/ben
+      BEN_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+      BEN_OTEL_ENABLED: "false"
+      BEN_OTEL_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # ---- LiteLLM Proxy: lõi gateway (ADR-017) ----
+  litellm-db-init:
+    image: pgvector/pgvector:pg16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:?}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      PGDATABASE: ben
+    entrypoint: ["/bin/sh", "-c"]
+    # Idempotent: volume Postgres tạo trước khi có LiteLLM không chạy lại script init
+    command:
+      - >
+        psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'litellm'" | grep -q 1 ||
+        psql -c "CREATE DATABASE litellm"
+    restart: "no"
+
+  mock-llm-cloud:
+    build:
+      context: ../../tools/mock_llm
+    restart: unless-stopped
+    environment:
+      MOCK_NAME: cloud
+    ports:
+      - "127.0.0.1:18081:8080"
+
+  mock-llm-local:
+    build:
+      context: ../../tools/mock_llm
+    restart: unless-stopped
+    environment:
+      MOCK_NAME: local
+    ports:
+      - "127.0.0.1:18082:8080"
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.100.1
+    restart: unless-stopped
+    command: ["--config", "/app/ben/config.yaml", "--port", "4000", "--num_workers", "2"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?}
+      LITELLM_LOG: INFO
+      PYTHONPATH: /app/ben-plugins
+      BEN_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+      # Kho ánh xạ PII dùng chung giữa các worker, mã hoá AES-GCM, DB Redis riêng
+      BEN_PII_STORE_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/2
+      BEN_PII_STORE_KEY: ${BEN_PII_STORE_KEY:?}
+      BEN_LOCAL_MODELS: mock-local-small,local-qwen
+      # Dev dùng mock; đổi thành local-qwen sau khi tải model
+      BEN_DEFAULT_LOCAL_MODEL: mock-local-small
+      MOCK_API_KEY: sk-mock
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./litellm:/app/ben:ro
+      - ../../libs/ben_litellm_plugins/src:/app/ben-plugins:ro
+    depends_on:
+      litellm-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      mock-llm-cloud:
+        condition: service_healthy
+      mock-llm-local:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 100
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  ollama_data:

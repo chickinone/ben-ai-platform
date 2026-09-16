@@ -1,0 +1,158 @@
+{
+  "realm": "ben",
+  "displayName": "Bến AI Platform (dev)",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "platform-admin", "description": "Quản trị toàn nền tảng" },
+      { "name": "tenant-admin", "description": "Quản trị một tenant" },
+      { "name": "approver", "description": "Duyệt hành động của agent" },
+      { "name": "security", "description": "Xem audit, sự cố guardrail" },
+      { "name": "dpo", "description": "Bảo vệ dữ liệu cá nhân" },
+      { "name": "data-owner", "description": "Chủ sở hữu dữ liệu" },
+      { "name": "data-steward", "description": "Duy trì nhãn và chất lượng dữ liệu" }
+    ]
+  },
+  "groups": [
+    { "name": "all-staff" },
+    { "name": "dept-cskh" },
+    { "name": "dept-sales" },
+    { "name": "dept-engineering" },
+    { "name": "dept-finance" },
+    { "name": "dept-hr" }
+  ],
+  "clients": [
+    {
+      "clientId": "ben-portal",
+      "name": "Bến Portal",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3001/*"],
+      "webOrigins": ["http://localhost:3001"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        },
+        {
+          "name": "tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant",
+            "claim.name": "tenant",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ben-demo-cli",
+      "name": "CLI demo (chỉ dev)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "minh",
+      "email": "minh@shopviet.vn",
+      "firstName": "Minh",
+      "lastName": "Platform",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "ben-dev-only", "temporary": false }],
+      "realmRoles": ["platform-admin"],
+      "groups": ["/all-staff"]
+    },
+    {
+      "username": "lan",
+      "email": "lan@shopviet.vn",
+      "firstName": "Lan",
+      "lastName": "CSKH",
+      "enabled": true,
+      "emailVerified": true,
+      "attributes": { "tenant": ["cskh"] },
+      "credentials": [{ "type": "password", "value": "ben-dev-only", "temporary": false }],
+      "realmRoles": ["tenant-admin", "data-owner"],
+      "groups": ["/all-staff", "/dept-cskh"]
+    },
+    {
+      "username": "hoa",
+      "email": "hoa@shopviet.vn",
+      "firstName": "Hoa",
+      "lastName": "Sales",
+      "enabled": true,
+      "emailVerified": true,
+      "attributes": { "tenant": ["hr"] },
+      "credentials": [{ "type": "password", "value": "ben-dev-only", "temporary": false }],
+      "groups": ["/all-staff", "/dept-sales"]
+    },
+    {
+      "username": "tuan",
+      "email": "tuan@shopviet.vn",
+      "firstName": "Tuấn",
+      "lastName": "Engineering",
+      "enabled": true,
+      "emailVerified": true,
+      "attributes": { "tenant": ["hr"] },
+      "credentials": [{ "type": "password", "value": "ben-dev-only", "temporary": false }],
+      "groups": ["/all-staff", "/dept-engineering"]
+    },
+    {
+      "username": "quan",
+      "email": "quan@shopviet.vn",
+      "firstName": "Quân",
+      "lastName": "Finance",
+      "enabled": true,
+      "emailVerified": true,
+      "attributes": { "tenant": ["finance"] },
+      "credentials": [{ "type": "password", "value": "ben-dev-only", "temporary": false }],
+      "realmRoles": ["approver"],
+      "groups": ["/all-staff", "/dept-finance"]
+    },
+    {
+      "username": "dpo",
+      "email": "dpo@shopviet.vn",
+      "firstName": "DPO",
+      "lastName": "ShopViet",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "ben-dev-only", "temporary": false }],
+      "realmRoles": ["dpo", "security"],
+      "groups": ["/all-staff"]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+# Cấu hình công cụ dùng chung cho cả monorepo. Mỗi package có pyproject riêng.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Đoạn code trong tài liệu là minh hoạ, không định dạng
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+# Chuỗi tiếng Việt có ký tự Unicode hợp lệ mà ruff coi là "dễ nhầm"
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+  "ben_common",
+  "ben_telemetry",
+  "ben_gateway",
+  "ben_control_plane",
+  "ben_litellm_plugins",
+]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+  "libs/ben_common/src",
+  "libs/ben_telemetry/src",
+  "libs/ben_litellm_plugins/src",
+  "services/gateway/src",
+  "services/control-plane/src",
+]
+mypy_path = [
+  "libs/ben_common/src",
+  "libs/ben_telemetry/src",
+  "libs/ben_litellm_plugins/src",
+  "services/gateway/src",
+  "services/control-plane/src",
+]
+explicit_package_bases = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+# LiteLLM chỉ có trong image proxy, không cài ở môi trường dev
+[[tool.mypy.overrides]]
+module = ["litellm", "litellm.*"]
+ignore_missing_imports = true
+
+# Hook LiteLLM có chữ ký do LiteLLM quy định, không khai báo kiểu đầy đủ ở phía Bến
+[[tool.mypy.overrides]]
+module = ["ben_litellm_plugins.guardrails", "ben_litellm_plugins.callbacks"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = [
+  "services/gateway/tests",
+  "services/control-plane/tests",
+  "libs/ben_litellm_plugins/tests",
+]
+addopts = "-q --import-mode=importlib"

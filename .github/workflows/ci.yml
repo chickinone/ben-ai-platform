@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cài package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e libs/ben_common -e libs/ben_telemetry -e "services/gateway[dev]" -e "services/control-plane[dev]" -e "libs/ben_litellm_plugins[dev]" ruff mypy
+      - name: Ruff
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Mypy
+        run: mypy
+      - name: Pytest
+        run: pytest
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ben
+          POSTGRES_PASSWORD: ben
+          POSTGRES_DB: ben_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ben -d ben_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      BEN_TEST_DATABASE_URL: postgresql+psycopg://ben:ben@localhost:5432/ben_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cài package
+        run: pip install -e "services/control-plane[dev]"
+      - name: Test migration, role và RLS
+        run: pytest services/control-plane/tests
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tạo .env tạm
+        run: python3 scripts/init_env.py
+      - name: Kiểm tra cấu hình compose
+        run: >
+          docker compose --env-file .env
+          -f deploy/compose/docker-compose.yml
+          -f deploy/compose/docker-compose.observability.yml
+          config --quiet

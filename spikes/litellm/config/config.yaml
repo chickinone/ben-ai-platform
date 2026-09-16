@@ -1,0 +1,68 @@
+# Cấu hình LiteLLM Proxy cho thử nghiệm (spike). Không dùng cho production.
+# Hai mock provider: mock-cloud (giả làm provider cloud) và mock-local (giả làm model local).
+
+model_list:
+  - model_name: cloud-small
+    litellm_params:
+      model: openai/mock-cloud-small
+      api_base: http://mock-cloud:8080/v1
+      api_key: os.environ/MOCK_API_KEY
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+    model_info:
+      residency: cloud
+
+  - model_name: local-small
+    litellm_params:
+      model: openai/mock-local-small
+      api_base: http://mock-local:8080/v1
+      api_key: os.environ/MOCK_API_KEY
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info:
+      residency: local
+
+  - model_name: claude-mock
+    litellm_params:
+      model: anthropic/claude-mock
+      api_base: http://mock-cloud:8080
+      api_key: os.environ/MOCK_API_KEY
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+    model_info:
+      residency: cloud
+
+router_settings:
+  num_retries: 0
+  fallbacks:
+    - cloud-small: ["local-small"]
+    # Cố ý cho phép local → cloud để test 3b kiểm tra governance có chặn được rò rỉ không
+    - local-small: ["cloud-small"]
+
+litellm_settings:
+  drop_params: true
+  # Lần chạy 1 phát hiện: payload logging chứa response ĐÃ khôi phục PII (chạy sau post_call).
+  # Khắc phục thử: không đưa nội dung messages/response vào payload logging; chỉ còn metadata, token, chi phí.
+  turn_off_message_logging: true
+  callbacks: ben_callbacks.usage_logger
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379
+
+guardrails:
+  # Thứ tự khai báo: governance trước, PII sau
+  - guardrail_name: ben-governance
+    litellm_params:
+      guardrail: ben_guardrails.BenGovernanceGuardrail
+      mode: ["pre_call"]
+      default_on: true
+  - guardrail_name: ben-pii
+    litellm_params:
+      guardrail: ben_guardrails.BenPIIGuardrail
+      mode: ["pre_call", "post_call"]
+      default_on: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

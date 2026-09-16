@@ -1,0 +1,13 @@
+[project]
+name = "ben-common"
+version = "0.1.0"
+description = "Thành phần dùng chung: settings, định dạng lỗi, request id, log JSON"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "pydantic-settings>=2.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

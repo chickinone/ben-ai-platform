@@ -1,0 +1,19 @@
+[project]
+name = "ben-litellm-plugins"
+version = "0.1.0"
+description = "Plugin của Bến cho LiteLLM Proxy: che PII, governance, metering (ADR-017)"
+requires-python = ">=3.12"
+# LiteLLM, redis, cryptography có sẵn trong image LiteLLM Proxy; không khai báo để tránh
+# kéo LiteLLM vào môi trường dev. Phần logic thuần (pii, streaming, governance, metering,
+# mapping_store) không import LiteLLM và được unit test độc lập.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "cryptography>=43",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

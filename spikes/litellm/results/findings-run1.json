@@ -1,0 +1,89 @@
+{
+  "1_cache_and_logs": {
+    "provider_calls": 1,
+    "second_call_cache_key_header": "bb423574cc4895cb925bcd39bd5cd53f0fa324fe1725ced46c797c5cf44e3eff",
+    "first_response_restored": true,
+    "second_response_restored": true,
+    "raw_phone_in_redis": false,
+    "raw_phone_in_proxy_logs": false,
+    "logging_payload_raw_phone_in_messages": [
+      "False",
+      "False"
+    ],
+    "logging_payload_raw_phone_in_response": [
+      "True",
+      "True"
+    ]
+  },
+  "2a_non_stream": {
+    "provider_saw_raw_phone": false,
+    "provider_saw_placeholder": true,
+    "client_got_restored": true
+  },
+  "2b_stream": {
+    "provider_saw_raw_phone": false,
+    "client_text": "[cloud] ECHO: [3f5d2edd] Gọi lại cho tôi số 0912 345 678 nhé"
+  },
+  "3a_reroute": {
+    "cloud_calls": 0,
+    "local_calls": 1,
+    "answered_by": "[local] EC"
+  },
+  "3b_fallback_leak": {
+    "cloud_calls": 0,
+    "local_calls": 1,
+    "client_error_status": "503"
+  },
+  "3c_fallback_sanity": {
+    "answered_by": "[local] EC"
+  },
+  "4a_unified_messages": {
+    "provider_saw_raw_phone": false,
+    "client_got_restored": true
+  },
+  "4b_passthrough": {
+    "error": null,
+    "provider_calls": 1,
+    "provider_saw_raw_phone": false,
+    "client_got_restored": false
+  },
+  "5a_usage_non_stream": {
+    "call_id_header": "63cb633c-2114-4fd5-9607-6e51c47fcd57",
+    "event": {
+      "call_id": "63cb633c-2114-4fd5-9607-6e51c47fcd57",
+      "slo_id": "chatcmpl-8cfe9cb8c533",
+      "model_group": "cloud-small",
+      "model": "openai/mock-cloud-small",
+      "call_type": "acompletion",
+      "tokens_in": "22",
+      "tokens_out": "12",
+      "cost_usd": "8.200000000000001e-05",
+      "cache_hit": "None",
+      "stream": "False",
+      "raw_phone_in_messages": "False",
+      "raw_phone_in_response": "False"
+    }
+  },
+  "5b_usage_stream": {
+    "call_id_header": "231541f7-33c2-44a6-b6b2-77acf7fc4bd6",
+    "event": {
+      "call_id": "231541f7-33c2-44a6-b6b2-77acf7fc4bd6",
+      "slo_id": "chatcmpl-2e16a0d91134",
+      "model_group": "cloud-small",
+      "model": "openai/mock-cloud-small",
+      "call_type": "acompletion",
+      "tokens_in": "26",
+      "tokens_out": "12",
+      "cost_usd": "8.6e-05",
+      "cache_hit": "False",
+      "stream": "True",
+      "raw_phone_in_messages": "False",
+      "raw_phone_in_response": "False"
+    }
+  },
+  "6_enterprise": {
+    "license_env_present": false,
+    "plugin_imports_enterprise": false,
+    "enterprise_markers_in_logs": []
+  }
+}
