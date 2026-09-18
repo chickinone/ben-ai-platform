@@ -1,4 +1,4 @@
-from scripts.evaluate_pii_vn import evaluate
+from ben_pii_vn.evaluation import evaluate
 
 
 def test_synthetic_pii_evaluation_has_500_samples_and_no_redaction_leakage():
