@@ -15,3 +15,7 @@ models:
   fallbacks:
     mock-cloud-small:
       - mock-local-small
+guardrails:
+  pii: redact
+  pii_restore: true
+  injection: block

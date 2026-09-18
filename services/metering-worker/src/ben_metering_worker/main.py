@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import socket
@@ -15,6 +16,8 @@ from typing import Any, cast
 import psycopg
 import redis
 from redis.exceptions import ResponseError
+
+from ben_metering_worker.audit import AuditConsumer
 
 STREAM_KEY = "stream:usage"
 GROUP = "metering"
@@ -211,6 +214,9 @@ class UsageConsumer:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Consumer Redis Streams của Bến")
+    parser.add_argument("--stream", choices=("usage", "guardrail-audit"), default="usage")
+    args = parser.parse_args()
     logging.basicConfig(level=os.environ.get("BEN_LOG_LEVEL", "INFO"))
     redis_url = os.environ["BEN_REDIS_URL"]
     database_url = os.environ["BEN_METERING_DATABASE_URL"]
@@ -225,7 +231,10 @@ def main() -> None:
         health_check_interval=30,
     )
     try:
-        UsageConsumer(client, database_url, consumer).run_forever()
+        if args.stream == "guardrail-audit":
+            AuditConsumer(client, database_url, consumer).run_forever()
+        else:
+            UsageConsumer(client, database_url, consumer).run_forever()
     finally:
         client.close()
 

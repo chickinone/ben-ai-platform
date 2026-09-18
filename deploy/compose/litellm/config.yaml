@@ -86,6 +86,11 @@ guardrails:
       guardrail: ben_guardrails.BenPIIGuardrail
       mode: ["pre_call", "post_call"]
       default_on: true
+  - guardrail_name: ben-injection
+    litellm_params:
+      guardrail: ben_guardrails.BenInjectionGuardrail
+      mode: ["pre_call"]
+      default_on: true
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

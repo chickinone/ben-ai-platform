@@ -29,6 +29,7 @@ CORE_TABLES = {
     "budgets",
     "usage_events",
     "usage_event_receipts",
+    "guardrail_audit_receipts",
     "documents",
     "chunks",
     "prompts",

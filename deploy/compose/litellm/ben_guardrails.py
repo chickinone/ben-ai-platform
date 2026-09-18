@@ -5,8 +5,14 @@ Code thật nằm ở libs/ben_litellm_plugins, được mount và thêm vào PY
 
 from ben_litellm_plugins.guardrails import (
     BenGovernanceGuardrail,
+    BenInjectionGuardrail,
     BenPIIGuardrail,
     BenSharedRateLimitGuardrail,
 )
 
-__all__ = ["BenGovernanceGuardrail", "BenPIIGuardrail", "BenSharedRateLimitGuardrail"]
+__all__ = [
+    "BenGovernanceGuardrail",
+    "BenInjectionGuardrail",
+    "BenPIIGuardrail",
+    "BenSharedRateLimitGuardrail",
+]

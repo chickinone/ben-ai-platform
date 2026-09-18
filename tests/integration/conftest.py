@@ -13,7 +13,12 @@ import pytest
 import redis
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RESULTS_FILE = Path(__file__).resolve().parent / "results" / "findings.json"
+RESULTS_FILE = Path(
+    os.environ.get(
+        "BEN_INTEGRATION_FINDINGS_FILE",
+        str(Path(__file__).resolve().parent / "results" / "findings.json"),
+    )
+)
 
 PROXY_URL = os.environ.get("BEN_PROXY_URL", "http://127.0.0.1:4000")
 ADMIN_URL = os.environ.get("BEN_LITELLM_ADMIN_URL", "http://127.0.0.1:4001")
@@ -118,6 +123,9 @@ def tenant(admin):
         rpm_limit: int | None = None,
         tpm_limit: int | None = None,
         service: bool = False,
+        pii_mode: str | None = None,
+        pii_restore: bool | None = None,
+        injection_mode: str | None = None,
     ) -> dict:
         team_id = str(uuid.uuid4())
         alias = f"it-{uuid.uuid4().hex[:8]}"
@@ -137,6 +145,9 @@ def tenant(admin):
                 **({"ben_rpm_limit": rpm_limit} if rpm_limit is not None else {}),
                 **({"ben_tpm_limit": tpm_limit} if tpm_limit is not None else {}),
                 **({"ben_service": True} if service else {}),
+                **({"ben_pii_mode": pii_mode} if pii_mode is not None else {}),
+                **({"ben_pii_restore": pii_restore} if pii_restore is not None else {}),
+                **({"ben_injection_mode": injection_mode} if injection_mode is not None else {}),
             },
         }
         if max_budget is not None:

@@ -10,11 +10,15 @@ from fastapi import HTTPException
 from litellm._logging import verbose_proxy_logger
 from litellm.integrations.custom_guardrail import CustomGuardrail
 
+from ben_litellm_plugins.audit import audit_logger
 from ben_litellm_plugins.governance import decide_routing, normalize_headers, trusted_label
 from ben_litellm_plugins.mapping_store import MappingStore, store_from_env
-from ben_litellm_plugins.pii import Redactor, restore_response
-from ben_litellm_plugins.rate_limits import consume_request, policy_from_metadata
+from ben_litellm_plugins.pii import Redactor, mask_response, restore_response
+from ben_litellm_plugins.rate_limits import consume_request
+from ben_litellm_plugins.rate_limits import policy_from_metadata as rate_policy
 from ben_litellm_plugins.streaming import StreamRestorer, restore_anthropic_sse_chunk
+from ben_pii_vn import PiiMode, detect_prompt_injection
+from ben_pii_vn.policy import policy_from_metadata as pii_policy
 
 _store: MappingStore | None = None
 
@@ -47,12 +51,36 @@ class BenPIIGuardrail(CustomGuardrail):
     """Che định danh trước khi gửi provider, khôi phục ở response (thường + streaming)."""
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data: dict, call_type):
+        policy = pii_policy(getattr(user_api_key_dict, "metadata", None))
+        if policy.mode is PiiMode.OFF:
+            return data
         redactor = Redactor()
         count = redactor.redact_request(data)
         call_id = data.get("litellm_call_id")
-        if count and call_id:
+        if count and policy.mode is PiiMode.BLOCK:
+            await audit_logger.record(
+                user_api_key_dict,
+                action="guardrail.pii_blocked",
+                call_id=call_id,
+                detail={
+                    "count": count,
+                    "kinds": sorted({key.split("_")[0][1:] for key in redactor.mapping}),
+                },
+            )
+            raise HTTPException(
+                status_code=400,
+                detail={"error": {"message": "Request chứa dữ liệu cá nhân theo policy tenant"}},
+            )
+        if count and call_id and policy.restore:
             await _mapping_store().put(call_id, redactor.mapping)
-        elif count:
+        if count:
+            await audit_logger.record(
+                user_api_key_dict,
+                action="guardrail.pii_redacted",
+                call_id=call_id,
+                detail={"count": count, "mode": policy.mode.value},
+            )
+        if count and not call_id:
             verbose_proxy_logger.warning(
                 "ben-pii: đã che nhưng thiếu litellm_call_id, không khôi phục được"
             )
@@ -60,15 +88,24 @@ class BenPIIGuardrail(CustomGuardrail):
         return data
 
     async def async_post_call_success_hook(self, data: dict, user_api_key_dict, response):
-        call_id = data.get("litellm_call_id")
-        if not call_id:
+        policy = pii_policy(getattr(user_api_key_dict, "metadata", None))
+        if policy.mode is PiiMode.OFF:
             return response
-        mapping = await _mapping_store().get(call_id)
-        return restore_response(response, mapping)
+        call_id = data.get("litellm_call_id")
+        mapping = await _mapping_store().get(call_id) if call_id and policy.restore else {}
+        if policy.restore:
+            restore_response(response, mapping)
+        # Chỉ miễn che những giá trị người dùng đã gửi và policy cho phép khôi phục.
+        return mask_response(response, set(mapping.values()) if policy.restore else None)
 
     async def async_post_call_streaming_iterator_hook(
         self, user_api_key_dict, response, request_data: dict
     ) -> AsyncGenerator[Any, None]:
+        policy = pii_policy(getattr(user_api_key_dict, "metadata", None))
+        if policy.mode is PiiMode.OFF or not policy.restore:
+            async for item in response:
+                yield item
+            return
         call_id = request_data.get("litellm_call_id")
         mapping = await _mapping_store().get(call_id) if call_id else {}
         if not mapping:
@@ -98,6 +135,45 @@ class BenPIIGuardrail(CustomGuardrail):
             tail = copy.deepcopy(last_text_chunk)
             _set_chunk_text(tail, restorer.flush())
             yield tail
+
+
+def _request_text(data: Any) -> str:
+    """Lấy text không tin cậy từ body request, không quét model/key/metadata."""
+    if isinstance(data, str):
+        return data
+    if isinstance(data, list):
+        return "\n".join(_request_text(item) for item in data)
+    if isinstance(data, dict):
+        return "\n".join(
+            _request_text(value)
+            for name, value in data.items()
+            if name in {"messages", "system", "content", "text", "input", "prompt"}
+        )
+    return ""
+
+
+class BenInjectionGuardrail(CustomGuardrail):
+    """Chặn heuristic injection tín hiệu cao trước khi request đến provider."""
+
+    async def async_pre_call_hook(self, user_api_key_dict, cache, data: dict, call_type):
+        metadata = getattr(user_api_key_dict, "metadata", None) or {}
+        mode = str(metadata.get("ben_injection_mode", "block")).lower()
+        if mode != "block":
+            return data
+        findings = detect_prompt_injection(_request_text(data))
+        if findings:
+            rules = ", ".join(finding.rule for finding in findings)
+            await audit_logger.record(
+                user_api_key_dict,
+                action="guardrail.injection_blocked",
+                call_id=data.get("litellm_call_id"),
+                detail={"rules": [finding.rule for finding in findings]},
+            )
+            raise HTTPException(
+                status_code=400,
+                detail={"error": {"message": f"Prompt injection bị chặn ({rules})"}},
+            )
+        return data
 
 
 class BenGovernanceGuardrail(CustomGuardrail):
@@ -145,7 +221,7 @@ class BenSharedRateLimitGuardrail(CustomGuardrail):
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data: dict, call_type):
         metadata = getattr(user_api_key_dict, "metadata", None)
-        policy = policy_from_metadata(metadata)
+        policy = rate_policy(metadata)
         if policy is None:
             return data
         if self._client is None:

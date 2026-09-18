@@ -14,6 +14,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.ruff.lint.isort]
 known-first-party = [
   "ben_common",
+  "ben_pii_vn",
   "ben_telemetry",
   "ben_gateway",
   "ben_control_plane",
@@ -25,6 +26,7 @@ known-first-party = [
 python_version = "3.12"
 files = [
   "libs/ben_common/src",
+  "libs/pii_vn/src",
   "libs/ben_telemetry/src",
   "libs/ben_litellm_plugins/src",
   "services/gateway/src",
@@ -33,6 +35,7 @@ files = [
 ]
 mypy_path = [
   "libs/ben_common/src",
+  "libs/pii_vn/src",
   "libs/ben_telemetry/src",
   "libs/ben_litellm_plugins/src",
   "services/gateway/src",
@@ -60,6 +63,7 @@ testpaths = [
   "services/gateway/tests",
   "services/control-plane/tests",
   "libs/ben_litellm_plugins/tests",
+  "libs/pii_vn/tests",
   "services/metering-worker/tests",
 ]
 addopts = "-q --import-mode=importlib"

@@ -1880,13 +1880,16 @@ async def test_sales_user_cannot_retrieve_engineering_bonus(rag, seed_hr_docs):
 **Trạng thái chốt Week 4:** luồng mock (policy, quota đa worker, PII streaming, fallback, metering và benchmark) hoàn tất. Xác nhận với Claude/OpenAI thật và đối chiếu usage provider là hạng mục Pending có chủ đích, không dùng gói Pro thay API billing.
 
 ### Tuần 5 — Guardrails
-- [ ] `libs/pii_vn`: SĐT, CCCD, STK, email, mã đơn, họ tên
-- [ ] Redact / restore / mask / block
-- [ ] Phát hiện prompt injection
-- [ ] Audit log
-- [ ] Bộ test PII 500 mẫu + báo cáo precision/recall
+- [x] `libs/pii_vn`: SĐT, CCCD, STK có ngữ cảnh, email, mã đơn, họ tên
+- [x] Redact / restore / mask / block, khai báo rõ trong policy YAML của tenant
+- [x] Phát hiện prompt injection tín hiệu cao (VN/EN), chặn trước provider
+- [x] Audit append-only: guardrail → Redis Streams → Postgres, consumer group + reclaim + idempotence
+- [x] Bộ test 500 mẫu tổng hợp deterministic + báo cáo precision/recall: [`docs/reports/pii_vn_eval.json`](reports/pii_vn_eval.json)
 
-**Xong khi:** 0 PII thô ra provider trên bộ test.
+**Trạng thái chốt Week 5:** trên 500 mẫu synthetic, không có PII thô còn lại sau redaction;
+integration test xác nhận `block`, `mask` và injection không tới mock provider; audit guardrail
+đã được lưu Postgres mà không chứa prompt. Đây không phải xác nhận coverage dữ liệu doanh nghiệp
+thật: trước production cần bộ test đã được phê duyệt, red-team theo ngữ cảnh và kiểm thử provider thật.
 
 ### Tuần 6 — RAG ingest & ACL
 - [ ] Upload → MinIO → worker parse/chunk/embed/index

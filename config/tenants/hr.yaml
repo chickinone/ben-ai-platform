@@ -12,3 +12,7 @@ models:
   allow:
     - mock-local-small
   fallbacks: {}
+guardrails:
+  pii: redact
+  pii_restore: true
+  injection: block

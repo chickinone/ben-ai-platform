@@ -142,6 +142,22 @@ services:
       redis:
         condition: service_healthy
 
+  guardrail-audit-worker:
+    build:
+      context: ../..
+      dockerfile: services/metering-worker/Dockerfile
+    command: ["ben-metering-worker", "--stream", "guardrail-audit"]
+    restart: unless-stopped
+    environment:
+      BEN_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+      BEN_METERING_DATABASE_URL: postgresql://ben_app:${BEN_APP_DB_PASSWORD:?}@postgres:5432/ben
+      BEN_LOG_LEVEL: INFO
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
   # ---- LiteLLM Proxy: lõi gateway (ADR-017) ----
   litellm-db-init:
     image: pgvector/pgvector:pg16
@@ -188,7 +204,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?}
       LITELLM_LOG: INFO
-      PYTHONPATH: /app/ben-plugins
+      PYTHONPATH: /app/ben-plugins:/app/ben-pii-vn
       BEN_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
       # Kho ánh xạ PII dùng chung giữa các worker, mã hoá AES-GCM, DB Redis riêng
       BEN_PII_STORE_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/2
@@ -201,6 +217,7 @@ services:
     volumes:
       - ./litellm:/app/ben:ro
       - ../../libs/ben_litellm_plugins/src:/app/ben-plugins:ro
+      - ../../libs/pii_vn/src:/app/ben-pii-vn:ro
     depends_on:
       litellm-db-init:
         condition: service_completed_successfully

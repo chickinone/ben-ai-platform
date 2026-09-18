@@ -1,0 +1,14 @@
+{
+  "generated_by": "python scripts/evaluate_pii_vn.py",
+  "dataset": "500 mẫu tổng hợp deterministic; không đại diện dữ liệu doanh nghiệp thật",
+  "samples": 500,
+  "metrics": {
+    "BANK": {"samples": 80, "true_positive": 80, "false_positive": 0, "false_negative": 0, "precision": 1.0, "recall": 1.0},
+    "CCCD": {"samples": 80, "true_positive": 80, "false_positive": 0, "false_negative": 0, "precision": 1.0, "recall": 1.0},
+    "EMAIL": {"samples": 80, "true_positive": 80, "false_positive": 0, "false_negative": 0, "precision": 1.0, "recall": 1.0},
+    "NAME": {"samples": 40, "true_positive": 40, "false_positive": 0, "false_negative": 0, "precision": 1.0, "recall": 1.0},
+    "ORDER": {"samples": 40, "true_positive": 40, "false_positive": 0, "false_negative": 0, "precision": 1.0, "recall": 1.0},
+    "PHONE": {"samples": 80, "true_positive": 80, "false_positive": 0, "false_negative": 0, "precision": 1.0, "recall": 1.0}
+  },
+  "raw_pii_after_redact": []
+}

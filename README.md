@@ -17,7 +17,8 @@ Nền tảng AI nội bộ đa tenant có quản trị dữ liệu: một cổng
 | 2 | Khung repo, Docker Compose, migration schema lõi, CI, gateway `/healthz` `/readyz` | ✅ `up` 151 s, 6/6 dịch vụ đạt (`scripts/verify_stack.py`) |
 | 3 | Gateway lõi trên LiteLLM Proxy ([ADR-017](docs/adr/017-litellm-proxy-as-gateway-core.md)): plugin, virtual key, ngân sách, 3 tenant demo, allow-list endpoint | ✅ |
 | 4 | Policy YAML → LiteLLM team UUID; Redis Streams → Postgres; rate limit Redis dùng chung | ✅ mock nội bộ; 🔶 Claude/OpenAI thật và đối soát provider để Pending |
-| 5–16 | Xem [lộ trình](docs/PROJECT.md#22-lộ-trình-16-tuần) | ⏳ |
+| 5 | Guardrails PII/injection: recognizer tiếng Việt, 4 mode policy, audit append-only, báo cáo eval | ✅ mock nội bộ: 500/500 mẫu synthetic; chưa thay thế kiểm thử dữ liệu doanh nghiệp thật |
+| 6–16 | Xem [lộ trình](docs/PROJECT.md#22-lộ-trình-16-tuần) | ⏳ |
 
 ## Chạy trong 5 phút
 
@@ -91,7 +92,12 @@ python .\scripts\benchmark_proxy.py --requests 30
 .\scripts\tasks.ps1 lint
 .\scripts\tasks.ps1 test
 .\scripts\tasks.ps1 test-integration   # cần up-core đang chạy
+.\scripts\tasks.ps1 eval-pii            # 500 mẫu PII synthetic, ghi báo cáo có version
 ```
+
+`eval-pii` không dùng dữ liệu khách hàng. Báo cáo tái lập nằm tại
+[`docs/reports/pii_vn_eval.json`](docs/reports/pii_vn_eval.json); trước khi dùng production,
+cần chạy thêm bộ mẫu đã được phê duyệt và red-team theo ngữ cảnh nghiệp vụ.
 
 Test migration cần một Postgres có pgvector:
 

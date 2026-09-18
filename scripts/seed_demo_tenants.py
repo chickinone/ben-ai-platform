@@ -75,12 +75,14 @@ def load_policies() -> list[dict[str, Any]]:
         tenant = policy.get("tenant")
         limits = policy.get("limits")
         models = policy.get("models")
+        guardrails = policy.get("guardrails")
         if (
             not isinstance(tenant, dict)
             or not isinstance(limits, dict)
             or not isinstance(models, dict)
+            or not isinstance(guardrails, dict)
         ):
-            raise RuntimeError(f"{path}: cần tenant, limits và models")
+            raise RuntimeError(f"{path}: cần tenant, limits, models và guardrails")
         try:
             tenant["id"] = str(uuid.UUID(str(tenant["id"])))
             tenant["slug"] = str(tenant["slug"])
@@ -92,10 +94,18 @@ def load_policies() -> list[dict[str, Any]]:
             policy["version"] = int(policy["version"])
             models["allow"] = [str(model) for model in models["allow"]]
             models["fallbacks"] = dict(models.get("fallbacks") or {})
+            guardrails["pii"] = str(guardrails["pii"])
+            if not isinstance(guardrails["pii_restore"], bool):
+                raise TypeError("guardrails.pii_restore phải là boolean")
+            guardrails["injection"] = str(guardrails["injection"])
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(f"{path}: policy không hợp lệ: {exc}") from exc
         if tenant["data_residency"] not in {"any", "local_only"}:
             raise RuntimeError(f"{path}: data_residency phải là any hoặc local_only")
+        if guardrails["pii"] not in {"off", "redact", "mask", "block"}:
+            raise RuntimeError(f"{path}: guardrails.pii không hợp lệ")
+        if guardrails["injection"] not in {"off", "block"}:
+            raise RuntimeError(f"{path}: guardrails.injection không hợp lệ")
         if (
             not models["allow"]
             or policy["version"] <= 0
@@ -201,12 +211,16 @@ def main() -> int:
         tenant = policy["tenant"]
         limits = policy["limits"]
         models = policy["models"]
+        guardrails = policy["guardrails"]
         alias = tenant["slug"]
         rate_metadata = {
             "ben_tenant": alias,
             "ben_policy_version": policy["version"],
             "ben_rpm_limit": limits["rpm"],
             "ben_tpm_limit": limits["tpm"],
+            "ben_pii_mode": guardrails["pii"],
+            "ben_pii_restore": guardrails["pii_restore"],
+            "ben_injection_mode": guardrails["injection"],
         }
         sync_control_plane(policy, control_database_url(dotenv))
         team = by_alias.get(alias)
