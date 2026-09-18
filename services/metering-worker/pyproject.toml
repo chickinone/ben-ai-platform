@@ -1,0 +1,19 @@
+[project]
+name = "ben-metering-worker"
+version = "0.1.0"
+description = "Consumer Redis Stream usage sang Postgres cho Bến"
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg[binary]>=3.2",
+  "redis>=5.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+ben-metering-worker = "ben_metering_worker.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

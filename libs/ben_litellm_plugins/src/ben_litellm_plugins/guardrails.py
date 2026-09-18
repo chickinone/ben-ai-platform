@@ -5,13 +5,16 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import redis.asyncio as redis
+from fastapi import HTTPException
 from litellm._logging import verbose_proxy_logger
 from litellm.integrations.custom_guardrail import CustomGuardrail
 
 from ben_litellm_plugins.governance import decide_routing, normalize_headers, trusted_label
 from ben_litellm_plugins.mapping_store import MappingStore, store_from_env
 from ben_litellm_plugins.pii import Redactor, restore_response
-from ben_litellm_plugins.streaming import StreamRestorer
+from ben_litellm_plugins.rate_limits import consume_request, policy_from_metadata
+from ben_litellm_plugins.streaming import StreamRestorer, restore_anthropic_sse_chunk
 
 _store: MappingStore | None = None
 
@@ -76,6 +79,11 @@ class BenPIIGuardrail(CustomGuardrail):
         restorer = StreamRestorer(mapping)
         last_text_chunk = None
         async for chunk in response:
+            # LiteLLM chuyển Anthropic /v1/messages sang raw SSE bytes/str tại đây,
+            # không phải OpenAI choices/delta object.
+            if isinstance(chunk, (str, bytes)):
+                yield restore_anthropic_sse_chunk(chunk, restorer)
+                continue
             text = _chunk_text(chunk)
             if text is None:
                 if restorer.has_pending:
@@ -119,4 +127,55 @@ class BenGovernanceGuardrail(CustomGuardrail):
             )
             data["model"] = decision.model
             data["disable_fallbacks"] = True
+        return data
+
+
+class BenSharedRateLimitGuardrail(CustomGuardrail):
+    """Chặn RPM/TPM ở Redis để quota không bị nhân đôi khi proxy có nhiều worker.
+
+    Metadata được gắn khi cấp virtual key; caller không thể đặt hay sửa nó qua header.
+    Khi Redis không khả dụng, chọn fail-closed để không tạo burst đột ngột tới provider.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        # LiteLLM injects guardrail_name khi nạp từ config.yaml.
+        super().__init__(*args, **kwargs)
+        self._redis_url = os.environ.get("BEN_REDIS_URL", "redis://redis:6379/0")
+        self._client: redis.Redis | None = None
+
+    async def async_pre_call_hook(self, user_api_key_dict, cache, data: dict, call_type):
+        metadata = getattr(user_api_key_dict, "metadata", None)
+        policy = policy_from_metadata(metadata)
+        if policy is None:
+            return data
+        if self._client is None:
+            self._client = redis.Redis.from_url(
+                self._redis_url,
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+            )
+        try:
+            # Giữ nguyên tuple: giải nén sớm sẽ làm mất liên hệ giữa hai phần tử,
+            # khiến trình kiểm kiểu không biết ``reason`` luôn có giá trị khi bị từ chối.
+            outcome = await consume_request(self._client, policy, data)
+        except Exception as exc:
+            verbose_proxy_logger.exception("ben-rate-limit: Redis không khả dụng")
+            raise HTTPException(
+                status_code=503,
+                detail={"error": {"message": "Rate limiter tạm thời không khả dụng"}},
+            ) from exc
+        if not outcome[0]:
+            reason = outcome[1]
+            limit = policy.rpm if reason == "rpm" else policy.tpm
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": {
+                        "message": f"Tenant vượt giới hạn {reason.upper()} mỗi phút ({limit})",
+                        "type": "rate_limit_exceeded",
+                    }
+                },
+                headers={"Retry-After": "60"},
+            )
         return data

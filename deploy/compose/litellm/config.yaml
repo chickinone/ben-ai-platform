@@ -71,6 +71,11 @@ litellm_settings:
   # Cache tắt cho đến khi có ADR-007
 
 guardrails:
+  - guardrail_name: ben-shared-rate-limit
+    litellm_params:
+      guardrail: ben_guardrails.BenSharedRateLimitGuardrail
+      mode: ["pre_call"]
+      default_on: true
   - guardrail_name: ben-governance
     litellm_params:
       guardrail: ben_guardrails.BenGovernanceGuardrail

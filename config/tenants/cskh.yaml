@@ -1,0 +1,17 @@
+version: 1
+tenant:
+  id: 3edc0d7b-5f10-5295-bb88-fbe0d4d324f9
+  slug: cskh
+  data_residency: any
+limits:
+  monthly_budget_usd: 50
+  warning_budget_usd: 40
+  rpm: 60
+  tpm: 60000
+models:
+  allow:
+    - mock-cloud-small
+    - mock-claude
+  fallbacks:
+    mock-cloud-small:
+      - mock-local-small

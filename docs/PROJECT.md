@@ -1863,20 +1863,21 @@ async def test_sales_user_cannot_retrieve_engineering_bonus(rag, seed_hr_docs):
 - [x] Mock provider dùng chung (`tools/mock_llm`)
 - [x] Tenant = team LiteLLM; virtual key theo tenant; allowlist model
 - [x] Test tích hợp: SDK `openai` + `anthropic` (`/v1/messages`), ngân sách, nhiều worker, ranh giới tin cậy của nhãn
-- [ ] Seed 3 tenant demo (`cskh`, `hr`, `finance`) bằng script thay vì tạo tay
-- [ ] Quyết định số phận `services/gateway` (FastAPI của tuần 2)
+- [x] Seed 3 tenant demo (`cskh`, `hr`, `finance`) bằng script thay vì tạo tay
+- [x] Quyết định số phận `services/gateway` (FastAPI của tuần 2): LiteLLM là data plane; skeleton FastAPI không còn deploy
 
 **Xong khi:** SDK `openai` và `anthropic` gọi qua proxy bằng virtual key của tenant; vượt ngân sách bị chặn; PII khôi phục đúng khi chạy 2 worker.
 
 ### Tuần 4 — Chi phí thật, routing theo policy, metering
-- [ ] Gọi Claude thật qua `/v1/messages`: thường, streaming, tool use; kiểm tra bảng giá model trong LiteLLM
-- [ ] Khôi phục PII khi streaming `/v1/messages`
-- [ ] Policy YAML của tenant → cấu hình team/router LiteLLM (allowlist, fallback, RPM/TPM)
-- [ ] Worker đọc `stream:usage` → `usage_events` (consumer group, idempotent)
-- [ ] Đối chiếu chi phí với usage provider (NFR-9)
-- [ ] Đo overhead proxy + plugin (NFR-1)
+- [~] Gọi Claude thật qua `/v1/messages`: thường, streaming, tool use; kiểm tra bảng giá model trong LiteLLM — **Pending**: cần Anthropic Console API key/billing riêng
+- [~] Gọi OpenAI/ChatGPT thật qua gateway — **Pending**: cần OpenAI API key/billing riêng; gói ChatGPT Pro không cấp API credit
+- [x] Khôi phục PII khi streaming `/v1/messages` với mock provider; Claude thật vẫn kiểm chứng ở mục trước
+- [x] Policy YAML của tenant → cấu hình team/router LiteLLM (allowlist, fallback, RPM/TPM); UUID tenant là `team_id` chuẩn; Redis guardrail giữ quota chung khi chạy nhiều worker
+- [x] Worker đọc `stream:usage` → `usage_events` (consumer group, `XAUTOCLAIM`, idempotent theo Redis stream ID)
+- [~] Đối chiếu chi phí với usage provider (NFR-9) — **Pending**: chờ usage export/API của Claude hoặc OpenAI thật
+- [x] Có script đo overhead proxy + plugin (NFR-1) với mock; benchmark provider thật để Pending
 
-**Xong khi:** tắt provider giữa lúc chạy, request vẫn thành công; chi phí khớp usage provider; overhead có số đo.
+**Trạng thái chốt Week 4:** luồng mock (policy, quota đa worker, PII streaming, fallback, metering và benchmark) hoàn tất. Xác nhận với Claude/OpenAI thật và đối chiếu usage provider là hạng mục Pending có chủ đích, không dùng gói Pro thay API billing.
 
 ### Tuần 5 — Guardrails
 - [ ] `libs/pii_vn`: SĐT, CCCD, STK, email, mã đơn, họ tên

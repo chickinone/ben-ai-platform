@@ -36,8 +36,8 @@ Quy mô mục tiêu: 10 triệu usage event/tháng (NFR-11) ≈ 4 event/giây tr
 Chọn **Redis Streams**.
 
 - Stream `stream:usage` (và `stream:provenance` từ tuần 12); gateway `XADD` với `MAXLEN ~` giới hạn độ dài.
-- Worker đọc bằng consumer group, ghi lô vào Postgres, `XACK` **sau** khi transaction commit; event pending quá hạn được worker khác nhận lại (`XAUTOCLAIM`).
-- Ghi Postgres idempotent theo `trace_id` để nhận lại không tạo bản ghi trùng.
+- Worker đọc bằng consumer group, ghi vào Postgres, `XACK` **sau** khi transaction commit; event pending quá hạn được worker khác nhận lại (`XAUTOCLAIM`).
+- Ghi Postgres idempotent theo **Redis stream ID**: `usage_event_receipts.stream_id` và dòng `usage_events` nằm trong cùng một transaction. Không dùng `trace_id` làm unique key vì một trace có thể có nhiều model call, và unique constraint trên bảng partitioned không bảo đảm toàn cục.
 - Redis bật AOF (`--appendonly yes`) trong compose.
 - Nguồn replay dài hạn là **bảng `usage_events` trong Postgres**, không phải stream.
 
@@ -48,7 +48,7 @@ Chọn **Redis Streams**.
 - (−) Redis đang cấu hình `maxmemory-policy noeviction` (Langfuse yêu cầu và cũng an toàn cho stream/quota) → cache của gateway phải có TTL và giới hạn kích thước riêng, không dựa vào eviction của Redis. Khi tách môi trường giống production, cân nhắc Redis riêng cho cache.
 - (−) Redis mất dữ liệu trong khoảng giữa hai lần fsync AOF → chấp nhận sai số nhỏ, đối chiếu định kỳ với usage provider (NFR-9).
 - (−) Khi Redis sập, gateway ghi đệm event ra file cục bộ rồi đẩy lại (PROJECT.md §17).
-- Kiểm chứng: test kill worker giữa lô ở tuần 4; đo thời gian `XADD` trong span.
+- Kiểm chứng: worker thực thi `XAUTOCLAIM` khi khởi động; kiểm tra crash giữa commit/XACK và đo thời gian `XADD` trong span vẫn là phần benchmark tuần 4.
 
 ## Điều kiện xem lại
 

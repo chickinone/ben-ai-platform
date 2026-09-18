@@ -3,7 +3,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('help', 'init', 'venv', 'lint', 'fmt', 'test', 'test-integration', 'config', 'up', 'up-core', 'down', 'ps', 'logs', 'migrate', 'pull-model')]
+    [ValidateSet('help', 'init', 'venv', 'lint', 'fmt', 'test', 'test-integration', 'seed-demo', 'config', 'up', 'up-core', 'down', 'ps', 'logs', 'migrate', 'pull-model')]
     [string]$Task = 'help',
 
     [Parameter(Position = 1)]
@@ -45,6 +45,7 @@ Tác vụ:
   venv              Tạo .venv và cài package ở chế độ editable
   lint | fmt | test Kiểm tra code, định dạng, chạy unit test
   test-integration  Test tích hợp với LiteLLM Proxy đang chạy
+  seed-demo         Tạo idempotent tenant demo cskh, hr, finance và virtual key dev
   config            Kiểm tra cấu hình Docker Compose
   up                Chạy toàn bộ (gồm OTel Collector, Langfuse)
   up-core           Chạy phần lõi (không có observability)
@@ -60,7 +61,7 @@ Tác vụ:
         Invoke-Checked -Exe $Py -Arguments @('-m', 'pip', 'install', '--upgrade', 'pip')
         Invoke-Checked -Exe $Py -Arguments @('-m', 'pip', 'install',
             '-e', 'libs/ben_common', '-e', 'libs/ben_telemetry',
-            '-e', 'services/gateway[dev]', '-e', 'services/control-plane[dev]',
+            '-e', 'services/gateway[dev]', '-e', 'services/control-plane[dev]', '-e', 'services/metering-worker[dev]',
             '-e', 'libs/ben_litellm_plugins[dev]', 'ruff', 'mypy', 'openai', 'anthropic')
     }
     'lint' {
@@ -79,6 +80,7 @@ Tác vụ:
         Assert-Venv
         Invoke-Checked -Exe $Py -Arguments @('-m', 'pytest', 'tests/integration', '-v', '-o', 'testpaths=tests/integration')
     }
+    'seed-demo' { Assert-Env; Assert-Venv; Invoke-Checked -Exe $Py -Arguments @('scripts/seed_demo_tenants.py') }
     'config' { Invoke-Compose -Arguments @('config', '--quiet'); Write-Host 'Cấu hình compose hợp lệ.' }
     'up' { Invoke-Compose -Arguments @('up', '-d', '--build') }
     'up-core' { Invoke-Compose -Core -Arguments @('up', '-d', '--build') }

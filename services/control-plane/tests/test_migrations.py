@@ -28,6 +28,7 @@ CORE_TABLES = {
     "model_catalog",
     "budgets",
     "usage_events",
+    "usage_event_receipts",
     "documents",
     "chunks",
     "prompts",

@@ -1,0 +1,14 @@
+version: 1
+tenant:
+  id: 7abfbf39-e833-5cf2-bc35-9a24d89f1d1d
+  slug: hr
+  data_residency: local_only
+limits:
+  monthly_budget_usd: 30
+  warning_budget_usd: 24
+  rpm: 30
+  tpm: 30000
+models:
+  allow:
+    - mock-local-small
+  fallbacks: {}

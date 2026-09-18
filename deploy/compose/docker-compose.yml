@@ -41,7 +41,7 @@ services:
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD:?}
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -58,8 +58,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:${MINIO_API_HOST_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -96,7 +96,7 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?}
       KC_HEALTH_ENABLED: "true"
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8080}:8080"
     volumes:
       - ./keycloak/ben-realm.json:/opt/keycloak/data/import/ben-realm.json:ro
     depends_on:
@@ -107,7 +107,7 @@ services:
     image: ollama/ollama:0.6.8
     restart: unless-stopped
     ports:
-      - "127.0.0.1:11434:11434"
+      - "127.0.0.1:${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -127,20 +127,15 @@ services:
         condition: service_healthy
     restart: "no"
 
-  gateway:
+  metering-worker:
     build:
       context: ../..
-      dockerfile: services/gateway/Dockerfile
+      dockerfile: services/metering-worker/Dockerfile
     restart: unless-stopped
     environment:
-      BEN_ENV: dev
-      BEN_SERVICE_NAME: gateway
-      BEN_DATABASE_URL: postgresql://ben_app:${BEN_APP_DB_PASSWORD:?}@postgres:5432/ben
       BEN_REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
-      BEN_OTEL_ENABLED: "false"
-      BEN_OTEL_ENDPOINT: http://otel-collector:4318
-    ports:
-      - "127.0.0.1:8000:8000"
+      BEN_METERING_DATABASE_URL: postgresql://ben_app:${BEN_APP_DB_PASSWORD:?}@postgres:5432/ben
+      BEN_LOG_LEVEL: INFO
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -173,7 +168,7 @@ services:
     environment:
       MOCK_NAME: cloud
     ports:
-      - "127.0.0.1:18081:8080"
+      - "127.0.0.1:${MOCK_CLOUD_HOST_PORT:-18081}:8080"
 
   mock-llm-local:
     build:
@@ -182,7 +177,7 @@ services:
     environment:
       MOCK_NAME: local
     ports:
-      - "127.0.0.1:18082:8080"
+      - "127.0.0.1:${MOCK_LOCAL_HOST_PORT:-18082}:8080"
 
   litellm:
     image: ghcr.io/berriai/litellm:v1.100.1
@@ -203,8 +198,6 @@ services:
       BEN_DEFAULT_LOCAL_MODEL: mock-local-small
       MOCK_API_KEY: sk-mock
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-    ports:
-      - "127.0.0.1:4000:4000"
     volumes:
       - ./litellm:/app/ben:ro
       - ../../libs/ben_litellm_plugins/src:/app/ben-plugins:ro
@@ -222,6 +215,31 @@ services:
       interval: 3s
       timeout: 3s
       retries: 100
+
+  # Edge không chứa logic gateway: chỉ allow-list endpoint đã được ADR-017 chấp nhận.
+  # Nhờ đó /anthropic/v1/messages không thể bypass luồng guardrail hai chiều.
+  litellm-edge:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LITELLM_PROXY_HOST_PORT:-4000}:8080"
+    volumes:
+      - ./nginx/litellm-edge.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      litellm:
+        condition: service_healthy
+
+  # Cổng quản trị dev chỉ bind loopback. Không expose proxy LiteLLM trực tiếp.
+  litellm-admin:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LITELLM_ADMIN_HOST_PORT:-4001}:8080"
+    volumes:
+      - ./nginx/litellm-admin.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      litellm:
+        condition: service_healthy
 
 volumes:
   postgres_data:

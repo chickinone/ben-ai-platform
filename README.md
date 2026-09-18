@@ -15,8 +15,9 @@ Nền tảng AI nội bộ đa tenant có quản trị dữ liệu: một cổng
 |---|---|---|
 | 1 | Yêu cầu, C4 cấp 1–2, threat model sơ bộ, ADR 001–005, kịch bản demo, thang phân loại (nháp) | ✅ bản đầu, chờ review |
 | 2 | Khung repo, Docker Compose, migration schema lõi, CI, gateway `/healthz` `/readyz` | ✅ `up` 151 s, 6/6 dịch vụ đạt (`scripts/verify_stack.py`) |
-| 3 | Gateway lõi trên LiteLLM Proxy ([ADR-017](docs/adr/017-litellm-proxy-as-gateway-core.md)): plugin, virtual key, ngân sách | 🚧 đang làm |
-| 4–16 | Xem [lộ trình](docs/PROJECT.md#22-lộ-trình-16-tuần) | ⏳ |
+| 3 | Gateway lõi trên LiteLLM Proxy ([ADR-017](docs/adr/017-litellm-proxy-as-gateway-core.md)): plugin, virtual key, ngân sách, 3 tenant demo, allow-list endpoint | ✅ |
+| 4 | Policy YAML → LiteLLM team UUID; Redis Streams → Postgres; rate limit Redis dùng chung | ✅ mock nội bộ; 🔶 Claude/OpenAI thật và đối soát provider để Pending |
+| 5–16 | Xem [lộ trình](docs/PROJECT.md#22-lộ-trình-16-tuần) | ⏳ |
 
 ## Chạy trong 5 phút
 
@@ -26,7 +27,9 @@ Cần: Docker Desktop, Python 3.12+. RAM khuyến nghị 16 GB (bản đầy đ�
 
 ```powershell
 .\scripts\tasks.ps1 init       # tạo .env với mật khẩu ngẫu nhiên
-.\scripts\tasks.ps1 up-core    # Postgres, Redis, MinIO, Keycloak, Ollama, migration, gateway
+.\scripts\tasks.ps1 venv       # cài dependency cho seed/test
+.\scripts\tasks.ps1 up-core    # Postgres, Redis, migration, worker metering, LiteLLM gateway
+.\scripts\tasks.ps1 seed-demo  # tạo cskh, hr, finance; key dev nằm ngoài Git
 .\scripts\tasks.ps1 ps
 ```
 
@@ -50,8 +53,8 @@ Tải model local lần đầu (khoảng 4–5 GB):
 
 | Dịch vụ | URL | Đăng nhập |
 |---|---|---|
-| LiteLLM Proxy (gateway, ADR-017) | http://localhost:4000 · UI: http://localhost:4000/ui | `LITELLM_MASTER_KEY` trong `.env` |
-| Gateway FastAPI (tuần 2, đang xem xét giữ/bỏ) | http://localhost:8000/readyz | — |
+| LiteLLM Proxy (gateway công khai, ADR-017) | http://localhost:4000 | virtual key của tenant |
+| LiteLLM admin (chỉ dev, loopback) | http://localhost:4001/ui | `LITELLM_MASTER_KEY` trong `.env` |
 | Mock provider (dev/test) | http://localhost:18081, http://localhost:18082 | — |
 | Keycloak | http://localhost:8080 | `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD` trong `.env` |
 | MinIO console | http://localhost:9001 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
@@ -61,18 +64,24 @@ Tải model local lần đầu (khoảng 4–5 GB):
 
 Người dùng demo trong realm Keycloak `ben` (mật khẩu `ben-dev-only`, **chỉ dùng cho môi trường dev**): `minh` (Platform Admin), `lan` (Tenant Admin CSKH), `hoa` (phòng Kinh doanh), `tuan` (phòng Kỹ thuật), `quan` (Finance), `dpo`.
 
-### Tạo tenant và gọi thử qua LiteLLM
+### Seed tenant demo và gọi thử qua LiteLLM
 
-Tenant là một *team* của LiteLLM; app dùng *virtual key* của team.
+Tenant là một *team* của LiteLLM; app dùng *virtual key* của team. Đường nhanh cho môi trường dev là:
 
 ```powershell
-$master = ((Select-String -Path .env -Pattern '^LITELLM_MASTER_KEY=').Line -split '=', 2)[1]
-$h = @{ Authorization = "Bearer $master" }
-$team = Invoke-RestMethod -Method Post http://localhost:4000/team/new -Headers $h -ContentType 'application/json' `
-  -Body '{"team_alias":"cskh","models":["mock-cloud-small","mock-claude"],"max_budget":50}'
-$key = Invoke-RestMethod -Method Post http://localhost:4000/key/generate -Headers $h -ContentType 'application/json' `
-  -Body (@{ team_id = $team.team_id; key_alias = 'cskh-app' } | ConvertTo-Json)
-$key.key   # đưa key này cho app, dùng với SDK openai (base_url http://localhost:4000/v1) hoặc anthropic (base_url http://localhost:4000)
+.\scripts\tasks.ps1 seed-demo
+python .\scripts\seed_demo_tenants.py --show-keys
+```
+
+Script an toàn để chạy lại khi `.demo-keys.json` còn tồn tại; file này bị Git bỏ qua vì chứa key dev và tách key theo URL admin. YAML trong `config/tenants/` là nguồn policy cho UUID, model, budget, RPM/TPM và fallback; seed đồng bộ limit vào cả team (aggregate) lẫn key dev (chặn request). API tenant chỉ dùng `http://localhost:4000`; cổng `4001` dành cho admin/dev và không route Anthropic passthrough.
+
+### Benchmark Week 4 với mock
+
+Sau khi seed, lấy key dev vào biến môi trường (không đưa key vào command line) rồi chạy benchmark. Kết quả là overhead proxy/plugin so với mock trực tiếp; không đại diện cho latency Claude/OpenAI thật.
+
+```powershell
+$env:BEN_BENCHMARK_API_KEY = (Get-Content .demo-keys.json | ConvertFrom-Json).'http://127.0.0.1:4001'.cskh
+python .\scripts\benchmark_proxy.py --requests 30
 ```
 
 ## Phát triển
@@ -101,8 +110,9 @@ ben-ai-platform/
 │   ├── ben_common/          # settings, định dạng lỗi chung, request id, log JSON
 │   └── ben_telemetry/       # khởi tạo OpenTelemetry
 ├── services/
-│   ├── gateway/             # FastAPI — hiện có /healthz, /readyz
-│   └── control-plane/       # migration Alembic cho schema lõi (API quản trị: tuần 10)
+│   ├── gateway/             # FastAPI skeleton tuần 2, không còn deploy (ADR-017)
+│   ├── control-plane/       # migration Alembic cho schema lõi (API quản trị: tuần 10)
+│   └── metering-worker/     # consumer Redis Stream usage → Postgres, idempotent
 ├── deploy/compose/          # docker-compose.yml, docker-compose.observability.yml, cấu hình Postgres/Keycloak/OTel
 ├── scripts/                 # tasks.ps1 (Windows), init_env.py
 ├── .github/workflows/ci.yml # lint, test, test migration, kiểm tra compose

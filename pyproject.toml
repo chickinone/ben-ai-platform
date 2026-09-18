@@ -18,6 +18,7 @@ known-first-party = [
   "ben_gateway",
   "ben_control_plane",
   "ben_litellm_plugins",
+  "ben_metering_worker",
 ]
 
 [tool.mypy]
@@ -28,6 +29,7 @@ files = [
   "libs/ben_litellm_plugins/src",
   "services/gateway/src",
   "services/control-plane/src",
+  "services/metering-worker/src",
 ]
 mypy_path = [
   "libs/ben_common/src",
@@ -35,6 +37,7 @@ mypy_path = [
   "libs/ben_litellm_plugins/src",
   "services/gateway/src",
   "services/control-plane/src",
+  "services/metering-worker/src",
 ]
 explicit_package_bases = true
 warn_unused_ignores = true
@@ -57,5 +60,6 @@ testpaths = [
   "services/gateway/tests",
   "services/control-plane/tests",
   "libs/ben_litellm_plugins/tests",
+  "services/metering-worker/tests",
 ]
 addopts = "-q --import-mode=importlib"

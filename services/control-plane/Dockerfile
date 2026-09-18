@@ -7,8 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
+COPY libs/ben_common /common
 COPY services/control-plane /app
-RUN pip install /app && useradd --create-home --uid 10001 ben
+RUN pip install /common /app && useradd --create-home --uid 10001 ben
 
 USER ben
 CMD ["alembic", "upgrade", "head"]

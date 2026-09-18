@@ -1,6 +1,6 @@
 import pytest
 
-from ben_litellm_plugins.streaming import StreamRestorer
+from ben_litellm_plugins.streaming import StreamRestorer, restore_anthropic_sse_chunk
 
 MAPPING = {"<PHONE_1>": "0912 345 678"}
 
@@ -29,3 +29,19 @@ def test_flush_returns_incomplete_tail_at_end_of_stream():
     assert restorer.has_pending
     assert restorer.flush() == "<PHO"
     assert not restorer.has_pending
+
+
+def test_restores_raw_anthropic_sse_text_delta_without_changing_protocol():
+    restorer = StreamRestorer(MAPPING)
+    frame = (
+        b"event: content_block_delta\n"
+        b'data: {"type":"content_block_delta","delta":'
+        b'{"type":"text_delta","text":"Goi <PHONE_1>"}}\n\n'
+    )
+
+    restored = restore_anthropic_sse_chunk(frame, restorer)
+
+    assert isinstance(restored, bytes)
+    assert b"event: content_block_delta\n" in restored
+    assert b"0912 345 678" in restored
+    assert b"<PHONE_1>" not in restored

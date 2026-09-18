@@ -1,0 +1,17 @@
+version: 1
+tenant:
+  id: 4d0f3d13-ea4f-545d-8814-07ceb0ed2c70
+  slug: finance
+  data_residency: any
+limits:
+  monthly_budget_usd: 80
+  warning_budget_usd: 64
+  rpm: 20
+  tpm: 20000
+models:
+  allow:
+    - mock-cloud-small
+    - mock-local-small
+  fallbacks:
+    mock-cloud-small:
+      - mock-local-small

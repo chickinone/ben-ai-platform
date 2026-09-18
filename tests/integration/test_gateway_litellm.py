@@ -7,6 +7,7 @@ import time
 import uuid
 
 import anthropic
+import httpx
 import openai
 import pytest
 
@@ -46,6 +47,15 @@ def test_openai_sdk_works_with_tenant_virtual_key(tenant, mock_cloud):
     assert len(mock_cloud.requests()) == 1
 
 
+def test_virtual_key_enforces_tenant_rpm_policy(tenant):
+    """LiteLLM cần limit nằm ở key để thực thi chắc chắn với virtual key."""
+    t = tenant(models=["mock-cloud-small"], rpm_limit=1, tpm_limit=1_000)
+    ask(t["key"], "mock-cloud-small", unique("Lần gọi thứ nhất"))
+
+    with pytest.raises(openai.RateLimitError):
+        ask(t["key"], "mock-cloud-small", unique("Lần gọi thứ hai"))
+
+
 def test_anthropic_sdk_v1_messages_redacts_and_restores(tenant, mock_cloud):
     t = tenant(models=["mock-claude"])
     message = anthropic_client(t["key"]).messages.create(
@@ -58,6 +68,43 @@ def test_anthropic_sdk_v1_messages_redacts_and_restores(tenant, mock_cloud):
 
     assert "<PHONE_1>" in sent and not contains_phone(sent)
     assert contains_phone(text)
+
+
+def test_anthropic_sdk_v1_messages_stream_redacts_and_restores(tenant, mock_cloud):
+    """SSE Anthropic phải khôi phục placeholder, kể cả khi mock cắt giữa ``<PHONE_1>``."""
+    t = tenant(models=["mock-claude"])
+    stream = anthropic_client(t["key"]).messages.create(
+        model="mock-claude",
+        max_tokens=256,
+        stream=True,
+        messages=[{"role": "user", "content": unique(f"SĐT {PHONE}, kiểm tra đơn giúp")}],
+    )
+    text = "".join(
+        event.delta.text
+        for event in stream
+        if event.type == "content_block_delta" and getattr(event.delta, "text", None)
+    )
+
+    assert "<PHONE_1>" in mock_cloud.sent_text() and not contains_phone(mock_cloud.sent_text())
+    assert contains_phone(text)
+
+
+def test_anthropic_passthrough_is_not_publicly_routable(tenant, mock_cloud):
+    """Không sửa passthrough một chiều; edge phải chặn nó trước khi tới LiteLLM/provider."""
+    t = tenant(models=["mock-claude"])
+    response = httpx.post(
+        f"{PROXY_URL}/anthropic/v1/messages",
+        headers={"Authorization": f"Bearer {t['key']}", "anthropic-version": "2023-06-01"},
+        json={
+            "model": "mock-claude",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": unique(f"SĐT {PHONE}")}],
+        },
+        timeout=10,
+    )
+
+    assert response.status_code == 404
+    assert mock_cloud.requests() == []
 
 
 def test_key_cannot_call_model_outside_its_allowlist(tenant, mock_local):

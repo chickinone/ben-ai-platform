@@ -46,6 +46,8 @@ Chọn **phương án 3**, với các điều kiện bắt buộc rút ra từ t
 3. **Governance:** hook ép model phải đặt `disable_fallbacks`.
 4. **Guardrail:** dùng `mode` dạng danh sách + `default_on`; không dùng `mode` theo tag (enterprise).
 5. **Nâng cấp:** pin phiên bản LiteLLM; bộ test thử nghiệm chạy trong CI và phải xanh trước mỗi lần nâng cấp.
+6. **Ranh giới public/admin:** LiteLLM là data plane duy nhất. Edge Nginx ở cổng public chỉ allow-list ba endpoint tenant; proxy LiteLLM không expose trực tiếp. Cổng admin loopback phục vụ seed, test và UI nhưng cũng không route Anthropic passthrough.
+7. **FastAPI tuần 2:** `services/gateway` không còn deploy trong Compose và không nằm trên đường request. Giữ source tạm thời làm skeleton tham khảo; control-plane API sẽ thuộc `services/control-plane` ở tuần 10.
 
 ## Hệ quả
 
@@ -57,14 +59,18 @@ Chọn **phương án 3**, với các điều kiện bắt buộc rút ra từ t
 - (−) Thêm một hệ thống có database riêng (LiteLLM dùng Postgres cho key, budget, spend log) → dữ liệu chi phí có ở hai nơi; `usage_events` của Bến vẫn là nguồn cho báo cáo.
 - ADR-002 cần sửa: "passthrough API gốc" → dùng `/v1/messages` hợp nhất của LiteLLM cho Anthropic.
 - Lộ trình tuần 3–4 đổi: thay vì viết adapter và router, làm plugin, virtual key/budget, đo overhead.
+- API tenant public chỉ gồm `/v1/chat/completions`, `/v1/embeddings`, `/v1/messages`; `/anthropic/*` trả 404. Đây là biện pháp an toàn, không phải cố sửa response của passthrough một chiều.
 
 ## Việc phải kiểm chứng (tuần 3–4)
 
 - [x] Virtual key và budget với database LiteLLM, không cần license (tuần 3 — `tests/integration`). **Ngân sách là giới hạn mềm:** hạn mức 0,0002 USD vẫn cho qua 4 request (tổng 0,000328 USD, vượt ~64%) rồi mới trả 429 `budget_exceeded`, do chi phí được cập nhật trễ và 2 worker kiểm tra song song → ngân sách thật cần đặt thấp hơn trần chịu được, cảnh báo sớm ở 80%
-- [ ] Gọi Claude thật qua `/v1/messages`, gồm streaming và tool use
-- [ ] Overhead độ trễ của proxy + plugin so với NFR-1
-- [ ] Khôi phục PII khi streaming `/v1/messages`
+- [~] Gọi Claude thật qua `/v1/messages`, gồm streaming và tool use — **Pending** Anthropic API billing/key
+- [~] Gọi OpenAI thật qua gateway — **Pending** OpenAI API billing/key (ChatGPT Pro không bao gồm API credit)
+- [x] Script benchmark overhead proxy + plugin trên mock; benchmark với provider thật để Pending theo NFR-1
+- [x] Khôi phục PII khi streaming `/v1/messages` với mock provider, bao gồm placeholder bị cắt qua SSE chunk (tuần 3 — `tests/integration`)
+- [x] `/anthropic/v1/messages` không public route được và không tới provider (tuần 3 — `tests/integration`)
 - [x] Chạy nhiều worker với kho ánh xạ dùng chung (tuần 3 — 2 worker, kho Redis mã hoá AES-GCM, 20/20 request khôi phục đúng)
+- [x] RPM/TPM của virtual key được đếm chung qua Redis guardrail, nên 2 worker không nhân đôi quota (tuần 4)
 
 ## Điều kiện xem lại
 

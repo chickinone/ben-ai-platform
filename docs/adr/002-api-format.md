@@ -73,6 +73,6 @@ Gateway hiện thực bằng LiteLLM Proxy. Thử nghiệm cho thấy passthroug
 |---|---|---|
 | SDK `openai`, router chọn model | `/v1/chat/completions` của Bến | `/v1/chat/completions` của LiteLLM |
 | SDK `anthropic`, định dạng gốc | Passthrough `/anthropic/v1/messages` | **`/v1/messages` hợp nhất của LiteLLM** — guardrail chạy cả hai chiều |
-| Passthrough nguyên byte | Mở cho mọi tenant | Chỉ mở cho tenant không có dữ liệu cá nhân, nếu thật sự cần |
+| Passthrough nguyên byte | Mở cho mọi tenant | **Không public route**; tenant dùng `/v1/messages` hợp nhất |
 
 Nguyên tắc "app chỉ đổi `base_url` + key" giữ nguyên.

@@ -10,9 +10,7 @@ import base64
 import json
 import subprocess
 import sys
-import time
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -55,15 +53,16 @@ def compose_exec(*args: str) -> str:
     return result.stdout
 
 
-def check_gateway(env: dict[str, str]) -> str:
-    body = httpx.get("http://127.0.0.1:8000/readyz", timeout=5).raise_for_status().json()
-    assert body["status"] == "ok", body
-    return f"readyz {body['checks']}"
-
-
-def check_litellm(env: dict[str, str]) -> str:
+def check_litellm_public_edge(env: dict[str, str]) -> str:
     httpx.get("http://127.0.0.1:4000/health/liveliness", timeout=5).raise_for_status()
-    return "liveliness ok"
+    blocked = httpx.post("http://127.0.0.1:4000/anthropic/v1/messages", timeout=5)
+    assert blocked.status_code == 404, blocked.status_code
+    return "liveliness ok; Anthropic passthrough bị chặn"
+
+
+def check_litellm_admin(env: dict[str, str]) -> str:
+    httpx.get("http://127.0.0.1:4001/health/liveliness", timeout=5).raise_for_status()
+    return "liveliness ok (loopback)"
 
 
 def check_keycloak(env: dict[str, str]) -> str:
@@ -108,41 +107,18 @@ def check_ollama(env: dict[str, str]) -> str:
     return f"version {version.get('version')}"
 
 
-def check_langfuse_receives_gateway_trace(env: dict[str, str]) -> str:
-    started = datetime.now(UTC)
-    # /docs là route được instrument (healthz/readyz bị loại khỏi trace)
-    for _ in range(3):
-        httpx.get("http://127.0.0.1:8000/docs", timeout=5)
-    auth = (env["LANGFUSE_INIT_PROJECT_PUBLIC_KEY"], env["LANGFUSE_INIT_PROJECT_SECRET_KEY"])
-    deadline = time.monotonic() + 120
-    while time.monotonic() < deadline:
-        # Langfuse v4 bỏ /api/public/traces; dữ liệu span đọc qua Observations API v2
-        response = httpx.get(
-            "http://127.0.0.1:3000/api/public/v2/observations",
-            params={"limit": 100},
-            auth=auth,
-            timeout=10,
-        )
-        response.raise_for_status()
-        fresh = [
-            obs
-            for obs in response.json().get("data", [])
-            if "/docs" in str(obs.get("name"))
-            and datetime.fromisoformat(str(obs["startTime"]).replace("Z", "+00:00")) >= started
-        ]
-        if fresh:
-            return f"{len(fresh)} observation mới từ gateway, ví dụ '{fresh[0]['name']}'"
-        time.sleep(5)
-    raise AssertionError("không thấy span GET /docs của gateway trên Langfuse sau 120 s")
+def check_redis(env: dict[str, str]) -> str:
+    assert compose_exec("redis", "redis-cli", "ping").strip() == "PONG"
+    return "PONG"
 
 
 CHECKS: list[tuple[str, Callable[[dict[str, str]], str]]] = [
-    ("Gateway FastAPI", check_gateway),
-    ("LiteLLM Proxy", check_litellm),
+    ("LiteLLM public edge", check_litellm_public_edge),
+    ("LiteLLM admin edge", check_litellm_admin),
     ("Keycloak (user demo)", check_keycloak),
     ("MinIO (4 bucket)", check_minio),
     ("Ollama", check_ollama),
-    ("Langfuse nhận trace gateway", check_langfuse_receives_gateway_trace),
+    ("Redis", check_redis),
 ]
 
 

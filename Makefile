@@ -3,7 +3,7 @@ COMPOSE_ALL  = $(COMPOSE_CORE) -f deploy/compose/docker-compose.observability.ym
 PY           = .venv/bin/python
 MODEL       ?= qwen2.5:7b
 
-.PHONY: help init venv lint fmt test test-integration config up up-core down ps logs migrate pull-model
+.PHONY: help init venv lint fmt test test-integration seed-demo config up up-core down ps logs migrate pull-model
 
 help:        ## Liệt kê tác vụ
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -14,7 +14,7 @@ init:        ## Tạo .env với mật khẩu ngẫu nhiên
 venv:        ## Tạo .venv và cài package editable
 	test -x $(PY) || python3 -m venv .venv
 	$(PY) -m pip install --upgrade pip
-	$(PY) -m pip install -e libs/ben_common -e libs/ben_telemetry -e "services/gateway[dev]" -e "services/control-plane[dev]" -e "libs/ben_litellm_plugins[dev]" ruff mypy openai anthropic
+	$(PY) -m pip install -e libs/ben_common -e libs/ben_telemetry -e "services/gateway[dev]" -e "services/control-plane[dev]" -e "services/metering-worker[dev]" -e "libs/ben_litellm_plugins[dev]" ruff mypy openai anthropic
 
 lint:        ## Kiểm tra code
 	$(PY) -m ruff check .
@@ -30,6 +30,9 @@ test:        ## Chạy test
 
 test-integration: ## Test tích hợp với LiteLLM Proxy đang chạy
 	$(PY) -m pytest tests/integration -v -o testpaths=tests/integration
+
+seed-demo: ## Tạo idempotent tenant demo và virtual key dev
+	$(PY) scripts/seed_demo_tenants.py
 
 config:      ## Kiểm tra cấu hình compose
 	$(COMPOSE_ALL) config --quiet

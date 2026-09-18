@@ -16,8 +16,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_FILE = Path(__file__).resolve().parent / "results" / "findings.json"
 
 PROXY_URL = os.environ.get("BEN_PROXY_URL", "http://127.0.0.1:4000")
+ADMIN_URL = os.environ.get("BEN_LITELLM_ADMIN_URL", "http://127.0.0.1:4001")
 MOCK_CLOUD_URL = os.environ.get("BEN_MOCK_CLOUD_URL", "http://127.0.0.1:18081")
 MOCK_LOCAL_URL = os.environ.get("BEN_MOCK_LOCAL_URL", "http://127.0.0.1:18082")
+REDIS_HOST = os.environ.get("BEN_REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.environ.get("BEN_REDIS_PORT", "6379"))
 
 
 def read_dotenv(path: Path) -> dict[str, str]:
@@ -90,7 +93,7 @@ def admin() -> httpx.Client:
     if not master_key:
         pytest.skip("Thiếu LITELLM_MASTER_KEY trong .env")
     with httpx.Client(
-        base_url=PROXY_URL, headers={"Authorization": f"Bearer {master_key}"}, timeout=30
+        base_url=ADMIN_URL, headers={"Authorization": f"Bearer {master_key}"}, timeout=30
     ) as client:
         yield client
 
@@ -108,18 +111,40 @@ def tenant(admin):
     keys: list[str] = []
     teams: list[str] = []
 
-    def make(*, models: list[str], max_budget: float | None = None, service: bool = False) -> dict:
+    def make(
+        *,
+        models: list[str],
+        max_budget: float | None = None,
+        rpm_limit: int | None = None,
+        tpm_limit: int | None = None,
+        service: bool = False,
+    ) -> dict:
+        team_id = str(uuid.uuid4())
         alias = f"it-{uuid.uuid4().hex[:8]}"
-        team = _post_json(admin, "/team/new", {"team_alias": alias, "models": models})
+        team_body: dict = {"team_id": team_id, "team_alias": alias, "models": models}
+        if rpm_limit is not None:
+            team_body["rpm_limit"] = rpm_limit
+        if tpm_limit is not None:
+            team_body["tpm_limit"] = tpm_limit
+        team = _post_json(admin, "/team/new", team_body)
         teams.append(team["team_id"])
         body: dict = {
             "team_id": team["team_id"],
             "models": models,
             "key_alias": alias,
-            "metadata": {"ben_tenant": alias, **({"ben_service": True} if service else {})},
+            "metadata": {
+                "ben_tenant": alias,
+                **({"ben_rpm_limit": rpm_limit} if rpm_limit is not None else {}),
+                **({"ben_tpm_limit": tpm_limit} if tpm_limit is not None else {}),
+                **({"ben_service": True} if service else {}),
+            },
         }
         if max_budget is not None:
             body["max_budget"] = max_budget
+        if rpm_limit is not None:
+            body["rpm_limit"] = rpm_limit
+        if tpm_limit is not None:
+            body["tpm_limit"] = tpm_limit
         key = _post_json(admin, "/key/generate", body)
         keys.append(key["key"])
         return {"team_id": team["team_id"], "alias": alias, "key": key["key"]}
@@ -133,8 +158,8 @@ def tenant(admin):
 
 def _redis(db: int, decode: bool) -> redis.Redis:
     return redis.Redis(
-        host="127.0.0.1",
-        port=6379,
+        host=REDIS_HOST,
+        port=REDIS_PORT,
         db=db,
         password=setting("REDIS_PASSWORD") or None,
         decode_responses=decode,

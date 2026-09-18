@@ -43,13 +43,6 @@ x-langfuse-depends-on: &langfuse-depends-on
     condition: service_healthy
 
 services:
-  gateway:
-    environment:
-      BEN_OTEL_ENABLED: "true"
-    depends_on:
-      otel-collector:
-        condition: service_started
-
   clickhouse:
     image: clickhouse/clickhouse-server:25.12
     restart: unless-stopped
